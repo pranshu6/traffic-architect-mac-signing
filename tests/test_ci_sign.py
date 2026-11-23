@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+import contextlib
 import zipfile
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
@@ -59,6 +61,21 @@ class SigningSafetyTests(unittest.TestCase):
     def test_process_failure_does_not_expose_private_output(self):
         with self.assertRaisesRegex(RuntimeError, '^Private operation failed$'):
             ci.checked(['python3','-c','print("private-code-secret"); raise SystemExit(1)'])
+
+    def test_bad_request_does_not_echo_input_or_start_tools(self):
+        env={k:'secret-value' for k in ci.REQUIRED}
+        env.update(KIT_TAG='$(print-private-source)',GITHUB_RUN_ID='123',GITHUB_RUN_ATTEMPT='1')
+        output=io.StringIO()
+        with patch.dict(ci.os.environ,env,clear=True), patch.object(ci,'checked') as tool, contextlib.redirect_stdout(output):
+            self.assertEqual(ci.main(),1)
+        tool.assert_not_called()
+        self.assertNotIn('print-private-source',output.getvalue())
+        self.assertNotIn('secret-value',output.getvalue())
+
+    def test_missing_secrets_stops_before_any_network_call(self):
+        with patch.dict(ci.os.environ,{},clear=True), patch.object(ci,'checked') as tool, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ci.main(),1)
+        tool.assert_not_called()
 
     def test_no_credential_or_game_artifact_upload_action(self):
         workflow=(SCRIPTS.parent/'.github/workflows/sign.yml').read_text()
