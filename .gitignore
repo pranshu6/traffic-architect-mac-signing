@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+signing.env
+*.p8
+*.p12
+*.zip
+*.tar.gz
+*.log
+Builds/

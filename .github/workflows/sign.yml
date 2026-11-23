@@ -1,0 +1,35 @@
+name: Sign Mac builds
+run-name: Sign ${{ inputs.kit_tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      kit_tag:
+        description: 'Private input release tag, for example kit-1.1.3-715bd9c4'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: apple-signing
+  cancel-in-progress: false
+jobs:
+  sign:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Build, sign, notarize, and save privately
+        env:
+          KIT_TAG: ${{ inputs.kit_tag }}
+          PRIVATE_BUILDS_TOKEN: ${{ secrets.PRIVATE_BUILDS_TOKEN }}
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: python3 scripts/ci_sign.py
