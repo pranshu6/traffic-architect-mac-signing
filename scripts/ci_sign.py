@@ -16,6 +16,7 @@ import tempfile
 import zipfile
 
 PRIVATE_REPO = 'pranshu6/traffic-architect-mac-builds'
+DIAGNOSTICS = None
 REQUIRED = ('PRIVATE_BUILDS_TOKEN', 'APPLE_CERTIFICATE_BASE64',
             'APPLE_CERTIFICATE_PASSWORD', 'APPLE_API_KEY_BASE64',
             'APPLE_API_KEY_ID', 'APPLE_API_ISSUER')
@@ -40,6 +41,9 @@ def checked(args, *, env=None, cwd=None, timeout=180, stdin=None):
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             timeout=timeout)
     if result.returncode:
+        if DIAGNOSTICS:
+            with DIAGNOSTICS.open('ab') as log:
+                log.write(result.stdout + b'\n')
         raise RuntimeError('Private operation failed')
     return result.stdout
 
@@ -55,6 +59,7 @@ def inspect_pair(paths, helper):
 
 def main():
     # Public messages below are fixed strings only. Never print exception text.
+    global DIAGNOSTICS
     root = Path(__file__).resolve().parent
     missing = [key for key in REQUIRED if not os.environ.get(key)]
     if missing:
@@ -78,6 +83,8 @@ def main():
     success = False
     with tempfile.TemporaryDirectory(prefix='ta-private-', dir=os.environ.get('RUNNER_TEMP')) as tmp:
         work = Path(tmp)
+        DIAGNOSTICS = work / 'setup.log'
+        stage = 'private kit access'
         try:
             os.chmod(work, 0o700)
             inputs = work / 'inputs'
@@ -93,6 +100,7 @@ def main():
             expected_tag = 'kit-' + infos[0]['version'] + '-' + infos[0]['commit']
             if tag != expected_tag:
                 raise ValueError('Tag and kit metadata differ')
+            stage = 'temporary signing credential setup'
             # Copy helper into temporary private work, away from checked-out public source.
             shutil.copyfile(root / 'sign_mac_builds.py', work / 'sign_mac_builds.py')
             (work / 'settings.json').write_text(json.dumps({'cache_root': str(work / 'cache')}))
@@ -132,6 +140,7 @@ def main():
             source = (work / 'sign_mac_builds.py').read_text()
             source = source.replace("if sys.platform == 'darwin':", 'if False:  # headless CI')
             (work / 'sign_mac_builds.py').write_text(source)
+            stage = 'build and Apple notarization'
             print('Building, signing and checking Apple notarization. Detailed output stays private.', flush=True)
             with (work / 'build-output.log').open('wb') as output:
                 process = subprocess.Popen([sys.executable, str(work / 'sign_mac_builds.py'), *map(str, paths)],
@@ -158,6 +167,7 @@ def main():
                 shutil.copyfile(archive, outputs / archive.name)
                 result['archive'] = archive.name
             (outputs / 'SIGNING_RESULTS.json').write_text(json.dumps(results, indent=2) + '\n')
+            stage = 'saving private downloads'
             out_tag = 'signed-' + tag[4:] + '-' + run_id + '-' + attempt
             checked(['gh', 'release', 'create', out_tag, '--repo', PRIVATE_REPO,
                      '--title', 'Verified Mac builds ' + tag[4:], '--notes',
@@ -171,7 +181,9 @@ def main():
             print('Both builds passed. Downloads are in the private builds repository.', flush=True)
         except Exception:
             # Raw tool output is never printed to the public job log.
-            print('Signing did not complete. Checking private diagnostics storage.', flush=True)
+            print('Signing stopped during ' + stage + '. Checking private diagnostics storage.', flush=True)
+            if stage == 'private kit access':
+                print('Check that PRIVATE_BUILDS_TOKEN can read the private builds repository and has Contents read/write access.', flush=True)
         finally:
             try:
                 logs = list(work.glob('*.log')) + list((work / 'Builds').glob('*/*.log'))
