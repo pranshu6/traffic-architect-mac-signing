@@ -35,12 +35,14 @@ def redact(data, sensitive):
     return data
 
 
-def checked(args, *, env=None, cwd=None, timeout=180, stdin=None):
+def checked(args, *, env=None, cwd=None, timeout=180, stdin=None, allow_existing_certificate=False):
     # Never inherit stdout/stderr: inputs, npm output, paths and tool errors are private.
     result = subprocess.run(args, cwd=cwd, env=env, input=stdin,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             timeout=timeout)
     if result.returncode:
+        if allow_existing_certificate and b'SecKeychainItemImport: The specified item already exists in the keychain.' in result.stdout:
+            return result.stdout
         if DIAGNOSTICS:
             with DIAGNOSTICS.open('ab') as log:
                 log.write(result.stdout + b'\n')
@@ -134,7 +136,7 @@ def main():
             intermediate = work / 'DeveloperIDG2CA.cer'
             checked(['curl', '--fail', '--silent', '--show-error', '--location', '--max-time', '60',
                      'https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer', '-o', str(intermediate)])
-            checked(['security', 'import', str(intermediate), '-k', str(keychain)])
+            checked(['security', 'import', str(intermediate), '-k', str(keychain)], allow_existing_certificate=True)
             cert.unlink()
             # Avoid Finder interaction on a headless runner.
             source = (work / 'sign_mac_builds.py').read_text()

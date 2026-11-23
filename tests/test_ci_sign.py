@@ -77,6 +77,16 @@ class SigningSafetyTests(unittest.TestCase):
             self.assertEqual(ci.main(),1)
         tool.assert_not_called()
 
+    def test_existing_public_intermediate_is_allowed_only_explicitly(self):
+        import subprocess
+        result=subprocess.CompletedProcess([],1,b'security: SecKeychainItemImport: The specified item already exists in the keychain.')
+        with patch.object(ci.subprocess,'run',return_value=result):
+            self.assertIn(b'already exists',ci.checked(['security'],allow_existing_certificate=True))
+            with self.assertRaises(RuntimeError):ci.checked(['security'])
+        result.stdout=b'certificate import failed for another reason'
+        with patch.object(ci.subprocess,'run',return_value=result):
+            with self.assertRaises(RuntimeError):ci.checked(['security'],allow_existing_certificate=True)
+
     def test_no_credential_or_game_artifact_upload_action(self):
         workflow=(SCRIPTS.parent/'.github/workflows/sign.yml').read_text()
         self.assertNotIn('upload-artifact', workflow)
