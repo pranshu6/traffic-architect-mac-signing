@@ -1,6 +1,7 @@
 # Traffic Architect Mac signing
 
-Generic signing automation. **Keep this repository private until an end-to-end test and log review pass.**
+Generic public signing automation. The first end-to-end cloud signing test passed on 23 November 2026.
+Both demo and full archives were verified and saved privately; the public run contained no Actions artifacts.
 
 Game kits, signed downloads, and detailed build logs belong only in
 [the private builds repository](https://github.com/pranshu6/traffic-architect-mac-builds).
@@ -65,3 +66,11 @@ Official references:
 - https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications
 - https://docs.github.com/en/actions/reference/security/secure-use
 - https://docs.github.com/en/billing/concepts/product-billing/github-actions
+
+## Verified first run
+
+[Successful signing run](https://github.com/pranshu6/traffic-architect-mac-signing/actions/runs/45200137336)
+used a standard Intel Mac runner to build universal Intel + Apple Silicon apps. The ARM runner
+queue had a capacity timeout, so the workflow now uses `macos-15-intel`. Both final upload hashes
+matched the verification records. Nine local tests and GitHub workflow checks passed.
+The certificate password and private-repo token were entered directly by the owner in Actions Secrets.
